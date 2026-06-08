@@ -24,7 +24,19 @@ jobs:
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
-          SEARCH_TAG: Satono+Diamond
+          SEARCH_TAG: Hatsune+Miku
+
+      # NEW: Save the posted.txt log back to GitHub so it isn't lost
+      - name: Save cache log
+        if: always()
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          if [ -f posted.txt ]; then
+            git add posted.txt
+            git commit -m "update posted.txt cache [skip ci]" || echo "No changes to commit"
+            git push origin main || echo "No changes to push"
+          fi
 
       - name: Upload debug html
         if: always()
