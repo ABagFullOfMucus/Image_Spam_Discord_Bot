@@ -3,6 +3,7 @@ import sys
 import aiohttp
 import re
 import asyncio
+from urllib.parse import quote
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
@@ -27,8 +28,9 @@ async def main():
 
     seen_images = load_cached_links()
     
-    # Using an open core gateway to pull the raw Zerochan XML directly without scraping blocks
-    url = f"https://api.allorigins.win/get?url={aiohttp.helpers.quote_with_netloc(f'https://www.zerochan.net/{SEARCH_TAG}?rss')}"
+    # Safely escape the Zerochan RSS target URL using urllib
+    target_url = f"https://www.zerochan.net/{SEARCH_TAG}?rss"
+    url = f"https://api.allorigins.win/get?url={quote(target_url, safe='')}"
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -42,11 +44,10 @@ async def main():
                     print("Gateway failed to resolve target host.")
                     return
                 
-                # AllOrigins wraps payloads inside a JSON object under the 'contents' key
                 json_data = await response.json()
                 raw_content = json_data.get("contents", "")
 
-        # Target explicit Zerochan post structures in the content payload
+        # Look for explicit zerochan link patterns in the parsed raw text payload
         raw_links = re.findall(r"https://www\.zerochan\.net/\d+", raw_content)
         
         unique_links = []
@@ -67,7 +68,6 @@ async def main():
             channel_url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages"
             auth_headers = {"Authorization": f"Bot {TOKEN}"}
 
-            # Post older items first to maintain proper timeline order
             for link in reversed(new_items):
                 payload = {"content": f"🚨 **New upload spotted!** 🚨\n{link}"}
                 async with session.post(channel_url, json=payload, headers=auth_headers) as resp:
