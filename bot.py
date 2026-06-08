@@ -26,16 +26,15 @@ async def main():
         sys.exit(1)
 
     seen_images = load_cached_links()
-    
-    # Direct target URL without broken proxy wrappers
     url = f"https://www.zerochan.net/{SEARCH_TAG}?rss"
     
-    # Deep browser-imitation headers to slip past Cloudflare's structural fingerprinting
+    # Critical browser imitation headers to bypass Cloudflare's 503 challenge
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
         "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
         "Cache-Control": "max-age=0",
         "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
         "Sec-Ch-Ua-Mobile": "?0",
@@ -48,16 +47,19 @@ async def main():
     }
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as response:
+        # Enforcing a standard browser-like TCP connector geometry
+        connector = aiohttp.TCPConnector(ssl=False)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            async with session.get(url, headers=headers, timeout=15) as response:
                 print(f"Zerochan Response Code: {response.status}")
+                
                 if response.status != 200:
                     print(f"Failed to fetch RSS feed. HTTP {response.status}")
                     return
                 
                 raw_content = await response.text()
 
-        # Look for explicit zerochan link patterns in the raw text stream
+        # Parse out the valid image matching patterns
         raw_links = re.findall(r"https://www\.zerochan\.net/\d+", raw_content)
         
         unique_links = []
@@ -78,15 +80,17 @@ async def main():
             channel_url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages"
             auth_headers = {"Authorization": f"Bot {TOKEN}"}
 
-            for link in reversed(new_items):
-                payload = {"content": f"🚨 **New upload spotted!** 🚨\n{link}"}
-                async with session.post(channel_url, json=payload, headers=auth_headers) as resp:
-                    if resp.status in (200, 201):
-                        save_to_cache(link)
-                        print(f"Successfully posted: {link}")
-                    else:
-                        print(f"Failed to post to Discord: HTTP {resp.status}")
-                await asyncio.sleep(1.5)
+            # Re-open a clean session for Discord API delivery
+            async with aiohttp.ClientSession() as discord_session:
+                for link in reversed(new_items):
+                    payload = {"content": f"🚨 **New upload spotted!** 🚨\n{link}"}
+                    async with discord_session.post(channel_url, json=payload, headers=auth_headers) as resp:
+                        if resp.status in (200, 201):
+                            save_to_cache(link)
+                            print(f"Successfully posted: {link}")
+                        else:
+                            print(f"Failed to post to Discord: HTTP {resp.status}")
+                    await asyncio.sleep(2.0)  # Safe rate-limit buffer
         else:
             print("Sync complete. No new updates to distribute.")
 
