@@ -3,7 +3,6 @@ import sys
 import aiohttp
 import re
 import asyncio
-from urllib.parse import quote
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
@@ -28,26 +27,27 @@ async def main():
 
     seen_images = load_cached_links()
     
-    # Safely escape the Zerochan RSS target URL using urllib
-    target_url = f"https://www.zerochan.net/{SEARCH_TAG}?rss"
-    url = f"https://api.allorigins.win/get?url={quote(target_url, safe='')}"
+    # Go straight to the source
+    url = f"https://www.zerochan.net/{SEARCH_TAG}?rss"
     
+    # A standard user-agent header makes the script look like a normal web browser
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept": "application/rss+xml, application/xml;q=0.9, */*;q=0.8"
     }
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as response:
-                print(f"Gateway Response Code: {response.status}")
+                print(f"Zerochan Response Code: {response.status}")
                 if response.status != 200:
-                    print("Gateway failed to resolve target host.")
+                    print(f"Failed to fetch RSS feed directly from Zerochan. HTTP {response.status}")
                     return
                 
-                json_data = await response.json()
-                raw_content = json_data.get("contents", "")
+                # We read the raw text stream (XML) directly instead of handling proxy JSON
+                raw_content = await response.text()
 
-        # Look for explicit zerochan link patterns in the parsed raw text payload
+        # Look for explicit zerochan link patterns in the raw XML text payload
         raw_links = re.findall(r"https://www\.zerochan\.net/\d+", raw_content)
         
         unique_links = []
