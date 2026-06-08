@@ -27,48 +27,51 @@ async def main():
 
     seen_images = load_cached_links()
     url = f"https://www.zerochan.net/{SEARCH_TAG}?rss"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) GHActionBot/5.0"}
+    
+    # Using a clean browser agent header to prevent Zerochan from serving blocked responses
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as response:
+                print(f"Zerochan Server Response Code: {response.status}")
                 if response.status != 200:
                     print(f"Failed to fetch Zerochan feed: HTTP {response.status}")
                     return
-                raw_html_xml = await response.text()
+                raw_content = await response.text()
 
-        # Broadened regex: Matches everything inside <link> tags up to the closing tag
-        raw_links = re.findall(r"<link>(https://www\.zerochan\.net/[^<]+)</link>", raw_html_xml)
+        # Debug: Print a tiny snippet of the source code to the GitHub log so you can see it
+        print("--- SOURCE SNIPPET START ---")
+        print(raw_content[:1000])
+        print("--- SOURCE SNIPPET END ---")
+
+        # Capture any link matching zerochan.net followed purely by digits
+        # This matches <link>, <guid>, and standard text blocks!
+        raw_links = re.findall(r"https://www\.zerochan\.net/\d+", raw_content)
         
+        # Filter and clean up the found links
         unique_links = []
         for l in raw_links:
-            # Clean off the tracking suffix so the links look pristine on Discord
-            clean_link = l.split('?')[0]
-            
-            # Skip the main channel hub link itself if it matches the base search tag root
-            if clean_link == f"https://www.zerochan.net/{SEARCH_TAG}":
-                continue
-                
-            if clean_link not in unique_links:
-                unique_links.append(clean_link)
+            if l not in unique_links:
+                unique_links.append(l)
 
         new_items = []
         for img_link in unique_links:
             if img_link not in seen_images:
                 new_items.append(img_link)
 
-        # Testing/First run override: if cache is empty, try to send what we grabbed
-        if not seen_images:
-            print(f"First run / empty cache detected. Testing mode active: grabbed {len(new_items)} images.")
+        print(f"Total Unique Image Links parsed from feed: {len(unique_links)}")
+        print(f"New images not found in cache: {len(new_items)}")
 
         if new_items:
-            print(f"Found {len(new_items)} new images! Sending to Discord...")
-            
+            print(f"Sending {len(new_items)} images to Discord...")
             channel_url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages"
             auth_headers = {"Authorization": f"Bot {TOKEN}"}
 
             for link in reversed(new_items):
-                payload = {"content": f"🚨 **New upload spotted for {SEARCH_TAG.replace('+', ' ')}!** 🚨\n{link}"}
+                payload = {"content": f"🚨 **New upload spotted!** 🚨\n{link}"}
                 async with aiohttp.ClientSession() as session:
                     async with session.post(channel_url, json=payload, headers=auth_headers) as resp:
                         if resp.status in (200, 201):
@@ -78,10 +81,10 @@ async def main():
                             print(f"Failed to post to Discord: HTTP {resp.status}")
                 await asyncio.sleep(1.5)
         else:
-            print("No new images found. Check if the tag matches Zerochan's naming perfectly.")
+            print("No new images to post right now.")
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"An error occurred in main logic: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())
