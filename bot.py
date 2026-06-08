@@ -1,101 +1,132 @@
 import os
-import sys
-import aiohttp
 import re
 import asyncio
+from pathlib import Path
+
+from playwright.async_api import async_playwright
+import aiohttp
 
 TOKEN = os.getenv("DISCORD_TOKEN")
-CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
+CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
 SEARCH_TAG = os.getenv("SEARCH_TAG", "Hatsune+Miku")
 
 CACHE_FILE = "posted.txt"
 
-def load_cached_links():
-    if not os.path.exists(CACHE_FILE):
+
+def load_cache():
+    if not Path(CACHE_FILE).exists():
         return set()
-    with open(CACHE_FILE, "r") as f:
-        return set(line.strip() for line in f if line.strip())
 
-def save_to_cache(link):
-    with open(CACHE_FILE, "a") as f:
-        f.write(f"{link}\n")
+    with open(CACHE_FILE, "r", encoding="utf-8") as f:
+        return {line.strip() for line in f if line.strip()}
 
-async def main():
-    if not TOKEN or not CHANNEL_ID:
-        print("Missing environment variables: DISCORD_TOKEN or DISCORD_CHANNEL_ID")
-        sys.exit(1)
 
-    seen_images = load_cached_links()
-    url = f"https://www.zerochan.net/{SEARCH_TAG}?rss"
-    
-    # Critical browser imitation headers to bypass Cloudflare's 503 challenge
+def save_cache(link):
+    with open(CACHE_FILE, "a", encoding="utf-8") as f:
+        f.write(link + "\n")
+
+
+async def get_zerochan_posts():
+    url = f"https://www.zerochan.net/{SEARCH_TAG}"
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True
+        )
+
+        page = await browser.new_page()
+
+        await page.goto(
+            url,
+            wait_until="networkidle",
+            timeout=60000
+        )
+
+        html = await page.content()
+
+        await browser.close()
+
+    links = re.findall(
+        r"https://www\.zerochan\.net/\d+",
+        html
+    )
+
+    unique = []
+
+    for link in links:
+        if link not in unique:
+            unique.append(link)
+
+    return unique
+
+
+async def send_to_discord(new_links):
+    api = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages"
+
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
-        "Cache-Control": "max-age=0",
-        "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-        "Sec-Ch-Ua-Mobile": "?0",
-        "Sec-Ch-Ua-Platform": '"Windows"',
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "none",
-        "Sec-Fetch-User": "?1",
-        "Upgrade-Insecure-Requests": "1"
+        "Authorization": f"Bot {TOKEN}"
     }
 
+    async with aiohttp.ClientSession() as session:
+
+        for link in reversed(new_links):
+
+            payload = {
+                "content": f"New image:\n{link}"
+            }
+
+            async with session.post(
+                api,
+                json=payload,
+                headers=headers
+            ) as resp:
+
+                if resp.status in (200, 201):
+                    print("Posted:", link)
+                    save_cache(link)
+
+                else:
+                    text = await resp.text()
+
+                    print(
+                        "Discord error:",
+                        resp.status,
+                        text
+                    )
+
+            await asyncio.sleep(1.5)
+
+
+async def main():
+
+    if not TOKEN:
+        raise ValueError("Missing DISCORD_TOKEN")
+
+    if not CHANNEL_ID:
+        raise ValueError("Missing DISCORD_CHANNEL_ID")
+
+    seen = load_cache()
+
     try:
-        # Enforcing a standard browser-like TCP connector geometry
-        connector = aiohttp.TCPConnector(ssl=False)
-        async with aiohttp.ClientSession(connector=connector) as session:
-            async with session.get(url, headers=headers, timeout=15) as response:
-                print(f"Zerochan Response Code: {response.status}")
-                
-                if response.status != 200:
-                    print(f"Failed to fetch RSS feed. HTTP {response.status}")
-                    return
-                
-                raw_content = await response.text()
+        posts = await get_zerochan_posts()
 
-        # Parse out the valid image matching patterns
-        raw_links = re.findall(r"https://www\.zerochan\.net/\d+", raw_content)
-        
-        unique_links = []
-        for l in raw_links:
-            if l not in unique_links:
-                unique_links.append(l)
+        print("Found:", len(posts))
 
-        new_items = []
-        for img_link in unique_links:
-            if img_link not in seen_images:
-                new_items.append(img_link)
+        new_posts = [
+            p for p in posts
+            if p not in seen
+        ]
 
-        print(f"Total Unique Image Links parsed from feed: {len(unique_links)}")
-        print(f"New images not found in cache: {len(new_items)}")
+        print("New:", len(new_posts))
 
-        if new_items:
-            print(f"Forwarding {len(new_items)} elements to Discord...")
-            channel_url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages"
-            auth_headers = {"Authorization": f"Bot {TOKEN}"}
-
-            # Re-open a clean session for Discord API delivery
-            async with aiohttp.ClientSession() as discord_session:
-                for link in reversed(new_items):
-                    payload = {"content": f"🚨 **New upload spotted!** 🚨\n{link}"}
-                    async with discord_session.post(channel_url, json=payload, headers=auth_headers) as resp:
-                        if resp.status in (200, 201):
-                            save_to_cache(link)
-                            print(f"Successfully posted: {link}")
-                        else:
-                            print(f"Failed to post to Discord: HTTP {resp.status}")
-                    await asyncio.sleep(2.0)  # Safe rate-limit buffer
+        if new_posts:
+            await send_to_discord(new_posts)
         else:
-            print("Sync complete. No new updates to distribute.")
+            print("No updates.")
 
     except Exception as e:
-        print(f"An unexpected runtime exception stopped execution: {e}")
+        print("ERROR:", repr(e))
+
 
 if __name__ == "__main__":
     asyncio.run(main())
