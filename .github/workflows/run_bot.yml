@@ -28,17 +28,20 @@ jobs:
           PAGES_TO_SCRAPE: 3
 
       # NEW: Save the posted.txt log back to GitHub so it isn't lost
-      - name: Save cache log
+     # Save both the logs and the current page progress tracker back to GitHub
+      - name: Save cache log and page progress
         if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          if [ -f posted.txt ]; then
-            git add posted.txt
-            git commit -m "update posted.txt cache [skip ci]" || echo "No changes to commit"
-            git push origin main || echo "No changes to push"
-          fi
-
+          
+          # Stage tracking files if they exist
+          [ -f posted.txt ] && git add posted.txt
+          [ -f current_page.txt ] && git add current_page.txt
+          
+          # Commit and push changes
+          git commit -m "sync logs and advance page tracker [skip ci]" || echo "No changes to commit"
+          git push origin main || echo "No changes to push"
       - name: Upload debug html
         if: always()
         uses: actions/upload-artifact@v4
