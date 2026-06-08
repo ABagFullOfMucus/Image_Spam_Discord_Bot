@@ -27,27 +27,28 @@ async def main():
 
     seen_images = load_cached_links()
     
-    # Go straight to the source
-    url = f"https://www.zerochan.net/{SEARCH_TAG}?rss"
+    # 1. Format the core target URL
+    target_url = f"https://www.zerochan.net/{SEARCH_TAG}?rss"
     
-    # A standard user-agent header makes the script look like a normal web browser
+    # 2. Use corsproxy.io to mask the GitHub cloud data center signature
+    url = f"https://corsproxy.io/?{target_url}"
+    
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        "Accept": "application/rss+xml, application/xml;q=0.9, */*;q=0.8"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
     }
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as response:
-                print(f"Zerochan Response Code: {response.status}")
+                print(f"Proxy Response Code: {response.status}")
                 if response.status != 200:
-                    print(f"Failed to fetch RSS feed directly from Zerochan. HTTP {response.status}")
+                    print(f"Failed to fetch RSS feed via proxy fallback. HTTP {response.status}")
                     return
                 
-                # We read the raw text stream (XML) directly instead of handling proxy JSON
+                # corsproxy.io streams raw data transparently without an annoying JSON container
                 raw_content = await response.text()
 
-        # Look for explicit zerochan link patterns in the raw XML text payload
+        # Look for explicit zerochan link patterns in the raw text stream
         raw_links = re.findall(r"https://www\.zerochan\.net/\d+", raw_content)
         
         unique_links = []
