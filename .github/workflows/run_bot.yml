@@ -24,7 +24,7 @@ jobs:
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
-          SEARCH_TAG: Hatsune+Miku
+          SEARCH_TAG: Satono+Diamond
 
       # NEW: Save the posted.txt log back to GitHub so it isn't lost
       - name: Save cache log
