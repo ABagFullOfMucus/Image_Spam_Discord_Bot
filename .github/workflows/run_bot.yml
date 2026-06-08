@@ -1,0 +1,45 @@
+name: Zerochan Real-Time Spammer
+
+on:
+  schedule:
+    - cron: '*/10 * * * *' # Runs automatically every 10 minutes
+  workflow_dispatch: # Allows you to trigger it manually via the GitHub UI
+
+jobs:
+  check-and-spam:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Crucial: Allows the runner to commit changes back to your repo
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install aiohttp
+
+    - name: Run Tracker Script
+      env:
+        DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+        DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
+        SEARCH_TAG: "Hatsune+Miku" # Change your tag here!
+      run: python bot.py
+
+    - name: Commit and Push Cache Changes
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        
+        # Check if posted.txt was updated, and commit if it was
+        if [ -f posted.txt ]; then
+          git add posted.txt
+          git diff-index --quiet HEAD || git commit -m "chore: update posted images cache [skip ci]"
+          git push
+        fi
