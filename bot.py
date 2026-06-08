@@ -25,39 +25,79 @@ def save_cache(link):
     with open(CACHE_FILE, "a", encoding="utf-8") as f:
         f.write(link + "\n")
 
+from playwright.async_api import async_playwright
+import re
+
 
 async def get_zerochan_posts():
     url = f"https://www.zerochan.net/{SEARCH_TAG}"
 
     async with async_playwright() as p:
+
         browser = await p.chromium.launch(
             headless=True
         )
 
-        page = await browser.new_page()
+        page = await browser.new_page(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/136.0.0.0 Safari/537.36"
+            )
+        )
 
         await page.goto(
             url,
-            wait_until="networkidle",
+            wait_until="domcontentloaded",
             timeout=60000
         )
 
+        await page.wait_for_timeout(5000)
+
         html = await page.content()
+
+        print("=" * 50)
+        print("HTML PREVIEW")
+        print("=" * 50)
+        print(html[:5000])
+        print("=" * 50)
+
+        with open("debug.html", "w", encoding="utf-8") as f:
+            f.write(html)
+
+        anchors = await page.locator("a").evaluate_all(
+            """
+            elements => elements.map(e => e.href)
+            """
+        )
 
         await browser.close()
 
-    links = re.findall(
-        r"https://www\.zerochan\.net/\d+",
-        html
-    )
+    links = []
 
-    unique = []
+    for href in anchors:
 
-    for link in links:
-        if link not in unique:
-            unique.append(link)
+        if not href:
+            continue
 
-    return unique
+        match = re.search(
+            r"zerochan\\.net/(\\d+)",
+            href
+        )
+
+        if match:
+            links.append(
+                f"https://www.zerochan.net/{match.group(1)}"
+            )
+
+    links = list(dict.fromkeys(links))
+
+    print(f"Links extracted: {len(links)}")
+
+    for x in links[:20]:
+        print(x)
+
+    return links
 
 
 async def send_to_discord(new_links):
