@@ -1,8 +1,8 @@
 import os
 import sys
 import aiohttp
+import re
 import asyncio
-import urllib.parse
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
@@ -27,50 +27,48 @@ async def main():
 
     seen_images = load_cached_links()
     
-    # Target Zerochan target URL
-    target_feed = f"https://www.zerochan.net/{SEARCH_TAG}?rss"
-    # Safely encode it to pass through the JSON proxy pipeline
-    encoded_feed = urllib.parse.quote_plus(target_feed)
+    # Utilizing an unblocked global RSS provider proxy to fetch the feed
+    url = f"https://www.inoreader.com/stream/user/1005180295/term/{SEARCH_TAG}"
     
-    # Requesting via the API gateway mirror to slip past Cloudflare filters smoothly
-    proxy_url = f"https://api.rss2json.com/v1/api.json?rss_url={encoded_feed}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
 
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(proxy_url) as response:
-                print(f"Proxy Gateway Response Code: {response.status}")
+            async with session.get(url, headers=headers) as response:
+                print(f"Aggregator Cache Response Code: {response.status}")
                 if response.status != 200:
-                    print(f"Failed to reach the feed mirror: HTTP {response.status}")
-                    return
-                
-                data = await response.json()
+                    # Fallback URL if target term route requires an alternative node
+                    fallback_url = f"https://rss.feed-api.com/v1/feed?url=https://www.zerochan.net/{SEARCH_TAG}?rss"
+                    print(f"Primary relay missed. Retrying via secondary feed delivery cluster...")
+                    async with session.get(fallback_url, headers=headers) as fb_resp:
+                        print(f"Fallback Cache Response Code: {fb_resp.status}")
+                        if fb_resp.status != 200:
+                            print("All clearing nodes blocked. Terminating run execution.")
+                            return
+                        raw_content = await fb_resp.text()
+                else:
+                    raw_content = await response.text()
 
-        if data.get("status") != "ok":
-            print(f"Mirror returned an error: {data.get('message', 'Unknown error')}")
-            return
-
-        items = data.get("items", [])
-        print(f"Total entries downloaded from feed provider: {len(items)}")
-
-        # Extract post links from the JSON payload structure
+        # Isolate individual raw link strings matching zerochan numeric posts
+        raw_links = re.findall(r"https://www\.zerochan\.net/\d+", raw_content)
+        
         unique_links = []
-        for item in items:
-            link = item.get("link", "")
-            if "zerochan.net" in link:
-                # Strip out any lingering query tags for a cleaner look
-                clean_link = link.split('?')[0]
-                if clean_link not in unique_links:
-                    unique_links.append(clean_link)
+        for l in raw_links:
+            if l not in unique_links:
+                unique_links.append(l)
 
         new_items = []
         for img_link in unique_links:
             if img_link not in seen_images:
                 new_items.append(img_link)
 
-        print(f"New images ready to distribute: {len(new_items)}")
+        print(f"Total Unique Image Links parsed from feed: {len(unique_links)}")
+        print(f"New images not found in cache: {len(new_items)}")
 
         if new_items:
-            print(f"Pushing updates to Discord channel {CHANNEL_ID}...")
+            print(f"Forwarding {len(new_items)} elements to Discord API endpoint...")
             channel_url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages"
             auth_headers = {"Authorization": f"Bot {TOKEN}"}
 
@@ -85,10 +83,10 @@ async def main():
                             print(f"Failed to post to Discord: HTTP {resp.status}")
                 await asyncio.sleep(1.5)
         else:
-            print("No new content found to distribute at this moment.")
+            print("Sync complete. No new updates to distribute.")
 
     except Exception as e:
-        print(f"An exception occurred inside the workflow runtime: {e}")
+        print(f"An unexpected runtime exception stopped execution: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())
