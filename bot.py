@@ -1,13 +1,13 @@
 import os
 import sys
 import aiohttp
-import xml.etree.ElementTree as ET
+import re
 import asyncio
 
 # Retrieve secrets securely from GitHub Actions Environment
 TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
-SEARCH_TAG = os.getenv("SEARCH_TAG", "Satono+Diamond")
+SEARCH_TAG = os.getenv("SEARCH_TAG", "Hatsune+Miku")
 
 CACHE_FILE = "posted.txt"
 
@@ -30,7 +30,7 @@ async def main():
 
     seen_images = load_cached_links()
     url = f"https://www.zerochan.net/{SEARCH_TAG}?rss"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) GHActionBot/3.0"}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) GHActionBot/4.0"}
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -38,37 +38,44 @@ async def main():
                 if response.status != 200:
                     print(f"Failed to fetch Zerochan feed: HTTP {response.status}")
                     return
-                xml_data = await response.text()
+                raw_html_xml = await response.text()
 
-        root = ET.fromstring(xml_data)
+        # Match any <link>https://www.zerochan.net/XXXXXX</link> format cleanly using Regex
+        # This completely avoids using strict XML tree parsers that crash on broken tags.
+        raw_links = re.findall(r"<link>(https://www\.zerochan\.net/\d+)</link>", raw_html_xml)
+        
+        # Deduplicate while preserving order
+        unique_links = []
+        for l in raw_links:
+            if l not in unique_links:
+                unique_links.append(l)
+
         new_items = []
-
-        for item in root.findall(".//item"):
-            img_link = item.find("link").text
+        for img_link in unique_links:
             if img_link not in seen_images:
                 new_items.append(img_link)
 
-        # If it's a brand new repo setup and cache is empty, seed it so it doesn't spam history
+        # Force Spam/Testing Override:
+        # If your posted.txt is empty, we bypass the "first run safeguard" to make sure it works!
         if not seen_images:
-            print("First run detected. Seeding cache file with current feed to prevent spam.")
-            for link in new_items:
-                save_to_cache(link)
-            return
+            print(f"First run / empty cache detected. Testing mode active: sending {len(new_items)} images.")
+            # If you don't want it to spam all existing images right now, uncomment the lines below:
+            # for link in new_items:
+            #     save_to_cache(link)
+            # return
 
         if new_items:
-            print(f"Found {len(new_items)} new images! Sending to Discord...")
+            print(f"Found {len(new_items)} images to process! Sending to Discord...")
             
-            # Using raw aiohttp webhook execution or a lightweight bot client initialization
-            # Since GitHub Actions runs as a short script, a standard Webhook execution is cleanest.
-            # However, since you have a Bot Token, we use a basic HTTP POST to Discord's channel endpoint:
             channel_url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages"
             auth_headers = {"Authorization": f"Bot {TOKEN}"}
 
+            # Loop through images chronologically (oldest to newest)
             for link in reversed(new_items):
                 payload = {"content": f"🚨 **New upload spotted!** 🚨\n{link}"}
                 async with aiohttp.ClientSession() as session:
                     async with session.post(channel_url, json=payload, headers=auth_headers) as resp:
-                        if resp.status == 200 or resp.status == 201:
+                        if resp.status in (200, 201):
                             save_to_cache(link)
                             print(f"Successfully posted: {link}")
                         else:
