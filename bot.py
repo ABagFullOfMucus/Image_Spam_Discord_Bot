@@ -27,25 +27,34 @@ async def main():
 
     seen_images = load_cached_links()
     
-    # 1. Format the core target URL
-    target_url = f"https://www.zerochan.net/{SEARCH_TAG}?rss"
+    # Direct target URL without broken proxy wrappers
+    url = f"https://www.zerochan.net/{SEARCH_TAG}?rss"
     
-    # 2. Use corsproxy.io to mask the GitHub cloud data center signature
-    url = f"https://corsproxy.io/?{target_url}"
-    
+    # Deep browser-imitation headers to slip past Cloudflare's structural fingerprinting
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Cache-Control": "max-age=0",
+        "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1"
     }
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as response:
-                print(f"Proxy Response Code: {response.status}")
+                print(f"Zerochan Response Code: {response.status}")
                 if response.status != 200:
-                    print(f"Failed to fetch RSS feed via proxy fallback. HTTP {response.status}")
+                    print(f"Failed to fetch RSS feed. HTTP {response.status}")
                     return
                 
-                # corsproxy.io streams raw data transparently without an annoying JSON container
                 raw_content = await response.text()
 
         # Look for explicit zerochan link patterns in the raw text stream
