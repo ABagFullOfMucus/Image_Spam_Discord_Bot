@@ -27,31 +27,26 @@ async def main():
 
     seen_images = load_cached_links()
     
-    # Utilizing an unblocked global RSS provider proxy to fetch the feed
-    url = f"https://www.inoreader.com/stream/user/1005180295/term/{SEARCH_TAG}"
+    # Using an open core gateway to pull the raw Zerochan XML directly without scraping blocks
+    url = f"https://api.allorigins.win/get?url={aiohttp.helpers.quote_with_netloc(f'https://www.zerochan.net/{SEARCH_TAG}?rss')}"
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as response:
-                print(f"Aggregator Cache Response Code: {response.status}")
+                print(f"Gateway Response Code: {response.status}")
                 if response.status != 200:
-                    # Fallback URL if target term route requires an alternative node
-                    fallback_url = f"https://rss.feed-api.com/v1/feed?url=https://www.zerochan.net/{SEARCH_TAG}?rss"
-                    print(f"Primary relay missed. Retrying via secondary feed delivery cluster...")
-                    async with session.get(fallback_url, headers=headers) as fb_resp:
-                        print(f"Fallback Cache Response Code: {fb_resp.status}")
-                        if fb_resp.status != 200:
-                            print("All clearing nodes blocked. Terminating run execution.")
-                            return
-                        raw_content = await fb_resp.text()
-                else:
-                    raw_content = await response.text()
+                    print("Gateway failed to resolve target host.")
+                    return
+                
+                # AllOrigins wraps payloads inside a JSON object under the 'contents' key
+                json_data = await response.json()
+                raw_content = json_data.get("contents", "")
 
-        # Isolate individual raw link strings matching zerochan numeric posts
+        # Target explicit Zerochan post structures in the content payload
         raw_links = re.findall(r"https://www\.zerochan\.net/\d+", raw_content)
         
         unique_links = []
@@ -68,19 +63,19 @@ async def main():
         print(f"New images not found in cache: {len(new_items)}")
 
         if new_items:
-            print(f"Forwarding {len(new_items)} elements to Discord API endpoint...")
+            print(f"Forwarding {len(new_items)} elements to Discord...")
             channel_url = f"https://discord.com/api/v10/channels/{CHANNEL_ID}/messages"
             auth_headers = {"Authorization": f"Bot {TOKEN}"}
 
+            # Post older items first to maintain proper timeline order
             for link in reversed(new_items):
                 payload = {"content": f"🚨 **New upload spotted!** 🚨\n{link}"}
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(channel_url, json=payload, headers=auth_headers) as resp:
-                        if resp.status in (200, 201):
-                            save_to_cache(link)
-                            print(f"Successfully posted: {link}")
-                        else:
-                            print(f"Failed to post to Discord: HTTP {resp.status}")
+                async with session.post(channel_url, json=payload, headers=auth_headers) as resp:
+                    if resp.status in (200, 201):
+                        save_to_cache(link)
+                        print(f"Successfully posted: {link}")
+                    else:
+                        print(f"Failed to post to Discord: HTTP {resp.status}")
                 await asyncio.sleep(1.5)
         else:
             print("Sync complete. No new updates to distribute.")
