@@ -24,7 +24,7 @@ jobs:
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
-          SEARCH_TAG: Hatsune+Miku
+          SEARCH_TAG: Satono+Diamond
 
       - name: Upload debug html
         if: always()
