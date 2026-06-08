@@ -25,6 +25,7 @@ jobs:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
           SEARCH_TAG: Satono+Diamond
+          PAGES_TO_SCRAPE: 3
 
       # NEW: Save the posted.txt log back to GitHub so it isn't lost
       - name: Save cache log
@@ -44,9 +45,4 @@ jobs:
         with:
           name: debug-html
           path: debug.html
-      - run: python bot.py
-        env:
-          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
-          DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
-          SEARCH_TAG: Hatsune+Miku
-          PAGES_TO_SCRAPE: 5  # <-- Change this value whenever you want to dig deeper
+      
