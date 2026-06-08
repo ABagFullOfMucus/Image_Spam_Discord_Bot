@@ -18,7 +18,7 @@ jobs:
 
       - run: |
           pip install aiohttp playwright
-          playwright install chromium
+          playwright install --with-deps chromium
 
       - run: python bot.py
         env:
