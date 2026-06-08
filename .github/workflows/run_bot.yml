@@ -2,7 +2,7 @@ name: Zerochan Real-Time Spammer
 
 on:
   schedule:
-    - cron: '*/10 * * * *' # Runs automatically every 10 minutes
+    - cron: '*/5 * * * *' # Runs automatically every 10 minutes
   workflow_dispatch: # Allows you to trigger it manually via the GitHub UI
 
 jobs:
