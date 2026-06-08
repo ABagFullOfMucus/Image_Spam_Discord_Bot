@@ -7,7 +7,7 @@ from playwright.async_api import async_playwright
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
-SEARCH_TAG = os.getenv("SEARCH_TAG", "Hatsune+Miku")
+SEARCH_TAG = os.getenv("SEARCH_TAG", "Satono+Diamond")
 
 CACHE_FILE = "posted.txt"
 
