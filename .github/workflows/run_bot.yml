@@ -25,7 +25,7 @@ jobs:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
           SEARCH_TAG: Satono+Diamond
-          PAGES_TO_SCRAPE: 100
+          PAGES_TO_SCRAPE: 30
 
       # NEW: Save the posted.txt log back to GitHub so it isn't lost
      # Save both the logs and the current page progress tracker back to GitHub
