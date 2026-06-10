@@ -10,7 +10,7 @@ CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
 SEARCH_TAG = os.getenv("SEARCH_TAG", "Satono+Diamond")
 
 # How many pages to progress through per 15-minute run
-PAGES_PER_RUN = int(os.getenv("PAGES_PER_RUN", "100"))
+PAGES_PER_RUN = int(os.getenv("PAGES_PER_RUN", "30"))
 CACHE_FILE = "posted.txt"
 PAGE_TRACKER_FILE = "current_page.txt"
 
