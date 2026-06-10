@@ -10,7 +10,7 @@ CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")
 SEARCH_TAG = os.getenv("SEARCH_TAG", "Satono+Diamond")
 
 # How many pages to progress through per 15-minute run
-PAGES_PER_RUN = int(os.getenv("PAGES_PER_RUN", "3"))
+PAGES_PER_RUN = int(os.getenv("PAGES_PER_RUN", "100"))
 CACHE_FILE = "posted.txt"
 PAGE_TRACKER_FILE = "current_page.txt"
 
@@ -29,7 +29,7 @@ def save_cache(link):
 
 def get_and_update_start_page():
     """Reads the last scraped page and updates it for the next run."""
-    start_page = 1
+    start_page = 0
     if Path(PAGE_TRACKER_FILE).exists():
         try:
             start_page = int(Path(PAGE_TRACKER_FILE).read_text().strip())
