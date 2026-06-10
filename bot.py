@@ -29,7 +29,7 @@ def save_cache(link):
 
 def get_and_update_start_page():
     """Reads the last scraped page and updates it for the next run."""
-    start_page = 0
+    start_page = 1
     if Path(PAGE_TRACKER_FILE).exists():
         try:
             start_page = int(Path(PAGE_TRACKER_FILE).read_text().strip())
