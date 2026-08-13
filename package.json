@@ -1,0 +1,25 @@
+{
+  "name": "image-spam-discord-bot",
+  "version": "2.0.0",
+  "description": "Scrapes Zerochan for new images matching a search tag and posts them to a Discord channel.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "lint": "eslint .",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "zerochan",
+    "scraper"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "playwright": "^1.49.1"
+  }
+}
